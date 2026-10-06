@@ -8,7 +8,7 @@ from heeps.config.definition_lyotstops import COLD_STOPS
 
 def update_config(band='L', band_specs={'L':{}}, mode='RAVC', lam=3.8e-6, 
         pupil_img_size=40, diam_ext=37, diam_int=11, ngrid=1024, pscale=5.47, 
-        hfov=1, ravc_calc=False, ravc_t=0.8 ,ravc_r=0.6, saveconf=False, 
+        hfov=1, ravc_calc=False, ravc_t=0.8 ,ravc_r=0.6, mask_name = None,saveconf=False, 
         verbose=False, **conf):
     """Updates some configuration parameters before running the end-to-end 
     simulation.
@@ -37,6 +37,7 @@ def update_config(band='L', band_specs={'L':{}}, mode='RAVC', lam=3.8e-6,
     # recalculate wavelength based on npupil
     lam = lam_npupil/npupil
     del(lam_npupil)
+    mask_name = conf.get('mask_name', mask_name)
     # normalized pupil image size (to pass to conf)
     diam_norm = pupil_img_size/diam_ext
     # calculate beam ratio (to pass to conf)
@@ -57,6 +58,21 @@ def update_config(band='L', band_specs={'L':{}}, mode='RAVC', lam=3.8e-6,
     [conf.pop(key) for key in ['conf', 'saveconf', 'verbose'] if key in conf]
     # sort alphabetically
     conf = {k: v for k, v in sorted(conf.items())}
+    # Validate aperture mask against the selected band.
+    if mode == 'ELT' and mask_name is not None:
+        if band in ('L', 'M'):
+            valid_masks = ('LM6c', 'LM12c')
+        elif band in ('N1', 'N2'):
+            valid_masks = ('N6c', 'N12c')
+        else:
+            raise ValueError(
+                f"No aperture masks are defined for band {band!r}"
+            )
+        if mask_name not in valid_masks:
+            raise ValueError(
+                f"mask_name={mask_name!r} is invalid for band {band!r}; "
+                f"choose one of {valid_masks}"
+            )
     # save conf as pickle file
     if saveconf is True:
         save2pkl('conf', **conf)
@@ -89,11 +105,19 @@ def update_config(band='L', band_specs={'L':{}}, mode='RAVC', lam=3.8e-6,
                 conf['f_lyot_stop'] = Path(conf['f_lyot_stop']) / \
                     COLD_STOPS['ULS-LM']['f_lyot_stop']
             elif conf['mode'] in ['ELT']:
-                conf['f_lyot_stop'] = Path(conf['f_lyot_stop']) / \
+                if conf['mask_name'] in ['LM6c']:
+                    conf['f_lyot_stop'] = Path(conf['f_lyot_stop']) / \
+                    COLD_STOPS['SPM-LM6c']['f_lyot_stop']
+                elif conf['mask_name'] in ['LM12c']:
+                    conf['f_lyot_stop'] = Path(conf['f_lyot_stop']) / \
+                    COLD_STOPS['SPM-LM12c']['f_lyot_stop']
+                else:
+                    conf['f_lyot_stop'] = Path(conf['f_lyot_stop']) / \
                     COLD_STOPS['SPM-LM']['f_lyot_stop']
             else:
                 print('   no auto-selected Lyot stop for mode=%s'%conf['mode'])
         elif band in ['N1', 'N2']:
+            print('   [ WARNING ] N-band Not yet supported')
             if conf['mode'] in ['CVC']:
                 # see also backup stop CLS-N-b
                 conf['f_lyot_stop'] = Path(conf['f_lyot_stop']) / \
@@ -102,8 +126,14 @@ def update_config(band='L', band_specs={'L':{}}, mode='RAVC', lam=3.8e-6,
                 conf['f_lyot_stop'] = Path(conf['f_lyot_stop']) / \
                     COLD_STOPS['ULS-N']['f_lyot_stop']
             elif conf['mode'] in ['ELT']:
-                # see also backup stop SPM-N-b
-                conf['f_lyot_stop'] = Path(conf['f_lyot_stop']) / \
+                if conf['mask_name'] in ['N6c']:
+                    conf['f_lyot_stop'] = Path(conf['f_lyot_stop']) / \
+                    COLD_STOPS['SPM-N6c']['f_lyot_stop']
+                elif conf['mask_name'] in ['N12c']:
+                    conf['f_lyot_stop'] = Path(conf['f_lyot_stop']) / \
+                    COLD_STOPS['SPM-N12c']['f_lyot_stop']
+                else:
+                    conf['f_lyot_stop'] = Path(conf['f_lyot_stop']) / \
                     COLD_STOPS['SPM-N']['f_lyot_stop']
         else:
                 print('   no auto-selected Lyot stop for mode=%s'%conf['mode'])
@@ -112,10 +142,9 @@ def update_config(band='L', band_specs={'L':{}}, mode='RAVC', lam=3.8e-6,
             print('   [ WARNING ] no file for auto-select Lyot stop not found at %s'%conf['f_lyot_stop'])
 
     elif conf['select_lyot'] != '': # string is not empty
-        print(f"\n   Selecting Lyot stop name {conf['select_lyot']}")
+        print(f'\n   Selecting Lyot stop name {conf['select_lyot']}')
         if Path(conf['f_lyot_stop']).is_file():
-            print(" [ WARNING ] Lyot stop name is set via select_lyot and f_lyot_stop file "
-                  f"({conf['f_lyot_stop']}) is also found. Using select_lyot.")
+            print(f' [ WARNING ] Lyot stop name is set via select_lyot and f_lyot_stop file ({conf['f_lyot_stop']})is also found. Using select_lyot.')
 
         conf['f_lyot_stop'] = Path(conf['f_lyot_stop']) / \
             COLD_STOPS[conf['select_lyot']]['f_lyot_stop']
